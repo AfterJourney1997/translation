@@ -1,0 +1,48 @@
+server:
+  port: 8888
+
+# 数据库连接
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/translation?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+    # Hikari连接池配置
+    hikari:
+      # 最小连接
+      minimum-idle: 5
+      # 最大连接
+      maximum-pool-size: 30
+      #自动提交
+      auto-commit: true
+      #最大空闲时常
+      idle-timeout: 30000
+      #连接池名
+      pool-name: MyHikariCP
+      #最大生命周期
+      max-lifetime: 1800000
+      #连接超时时间
+      connection-timeout: 30000
+      #心跳检测
+      connection-test-query: select 1
+
+  # 设置上传文件的最大值
+  servlet:
+    multipart:
+      max-file-size: 500MB
+      max-request-size: 500MB
+
+logging:
+  level:
+    com.translation.dao : debug
+
+hdfs:
+  filePath: /sss
+  path: hdfs://192.168.201.131:9000
+  username: hadoop
+
+TRANSLATION_URL: http://raasr.xfyun.cn/api
+APP_ID: 5d3fe04e
+SECRET_KEY: b53092030c92e3b509c361f6217e398f
