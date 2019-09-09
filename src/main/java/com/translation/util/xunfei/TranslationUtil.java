@@ -1,28 +1,31 @@
 package com.translation.util.xunfei;
 
+import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.lang.Validator;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.translation.dao.ProgramMapper;
 import com.translation.entity.Program;
+import com.translation.entity.ProgramStatus;
 import com.translation.util.dto.ApiResultDto;
 import com.translation.task.TaskQueueOperate;
-import com.translation.util.ApplicationContextProvider;
+import com.translation.util.beanFactory.ApplicationContextProvider;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
+import org.apache.hadoop.yarn.webapp.hamlet2.Hamlet;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
-import org.springframework.web.multipart.MultipartFile;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.beans.Transient;
 import java.io.IOException;
 import java.io.InputStream;
 import java.security.SignatureException;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 
 @Slf4j
 @Component
+@ConfigurationProperties("xunfei")
 public class TranslationUtil {
 
     private static String TRANSLATION_URL;
@@ -34,117 +37,111 @@ public class TranslationUtil {
     private static final String MERGE = "/merge";
     private static final String GET_RESULT = "/getResult";
     private static final String GET_PROGRESS = "/getProgress";
+    private static final int REMOTE_TRANSLATION_SUCCESS = 9;
 
     // 文件分片大小
-    private static final int SLICE_SICE = 20971520;
+    private static final int SLICE_SIZE = 10485760;//10M
 
-    @Value("${TRANSLATION_URL}")
-    private void setTRANSLATION_URL(String TRANSLATION_URL){
-        TranslationUtil.TRANSLATION_URL = TRANSLATION_URL;
+    public void setUrl(String url) {
+        TRANSLATION_URL = url;
     }
 
-    @Value("${APP_ID}")
-    private void setAPP_ID(String APP_ID){
-        TranslationUtil.APP_ID = APP_ID;
+    public void setAppId(String appId) {
+        APP_ID = appId;
     }
 
-    @Value("${SECRET_KEY}")
-    private void setSECRET_KEY(String SecretKey){
-        TranslationUtil.SECRET_KEY = SecretKey;
+    public void setSecretKey(String secretKey) {
+        SECRET_KEY = secretKey;
     }
+
 
     // 上传文件获取taskId
-    public static String updateFileAndGetTaskId(Program program, MultipartFile file) {
-
+    public static String updateFileAndGetTaskId(InputStream inputStream, String fileName) {
+        String taskId = null;
         try {
-            InputStream fis = file.getInputStream();
-
+            long fileLength = inputStream.available();
+            log.info("文件大小:{}", fileLength);
             // 预处理
-            String taskId = prepare(file);
-
+            taskId = prepare(fileLength, fileName);
             // 分片上传文件
             int len;
-            byte[] slice = new byte[SLICE_SICE];
+            byte[] slice = new byte[SLICE_SIZE];
             SliceIdGenerator generator = new SliceIdGenerator();
-            while ((len =fis.read(slice)) > 0) {
+            while ((len = inputStream.read(slice)) > 0) {
                 // 上传分片
-                if (fis.available() == 0) {
+                if (inputStream.available() == 0) {
                     slice = Arrays.copyOfRange(slice, 0, len);
                 }
                 uploadSlice(taskId, generator.getNextSliceId(), slice);
             }
-
+            log.info("文件上传完成");
             // 合并文件
             merge(taskId);
-
-            // 存入taskId
-            program.setContent(taskId);
-
-            // 任务id入队
-            TaskQueueOperate.addTask(program);
-            log.info("获取taskId成功，加入任务队列：{}", program);
-
-            return taskId;
-
+            TaskQueueOperate.addTask(taskId);
         } catch (IOException | SignatureException e) {
             e.printStackTrace();
         }
-
-        return null;
+        return taskId;
 
     }
 
-    public static void scanQueue(Program program) throws SignatureException {
-
-        String taskId = program.getContent();
-
+    public static void scanQueue(String taskId) throws SignatureException {
         // 获取转译过程信息
         ApiResultDto taskProgress = TranslationUtil.getProgress(taskId);
         if (taskProgress.getOk() == 0) {
             // Err_no非0即为转译失败
             if (taskProgress.getErr_no() != 0) {
-
                 // 修改库中program状态
-                program.setStatus(-1);
-                program.setContent(null);
-                ApplicationContextProvider.getBean(ProgramMapper.class).updateByPrimaryKey(program);
-
+                ApplicationContextProvider.getBean(ProgramMapper.class).updateStatus("error", ProgramStatus.TRANSLATION_FAIL.getCode());
                 // 任务失败，将任务从队列移除
                 log.info(taskId + " 任务失败：{}", taskProgress);
-                TaskQueueOperate.removeTask(program);
-                return;
+                TaskQueueOperate.removeTask(taskId);
             }
-
             // 获取任务状态
             String taskStatus = taskProgress.getData();
             // 状态码为9即为转译完成
-            if (JSON.parseObject(taskStatus).getInteger("status") == 9) {
-
-                // 获取结果，修改库中program信息及状态
-                String result = getContentFromJSON(TranslationUtil.getResult(taskId));
-                program.setStatus(1);
-                program.setContent(result);
-                log.info("================{}",result);
-                ApplicationContextProvider.getBean(ProgramMapper.class).updateByContentTaskId(taskId, program);
-
+            if (JSON.parseObject(taskStatus).getInteger("status") == REMOTE_TRANSLATION_SUCCESS) {
+                String resultData = TranslationUtil.getResult(taskId);
+                updateContent(resultData, taskId);
                 // 任务成功，将任务从队列移除
                 log.info(taskId + " 任务完成：{}", taskProgress);
-                TaskQueueOperate.removeTask(program);
+                TaskQueueOperate.removeTask(taskId);
                 return;
             }
-
-            log.info(taskId + " 仍在转译中......");
-        }else{
-            log.info(taskId + " 获取任务进度失败！");
+            log.info("任务Id： " + taskId + " 仍在转译中......");
+        } else {
+            log.info("获取任务进度失败，taskId： {} resultData： {}", taskId, taskProgress);
         }
-
     }
+
+    /**
+     * 预处理
+     *
+     * @param fileLength 文件大小
+     * @param fileName   文件名
+     * @return taskId
+     */
+    private static String prepare(long fileLength, String fileName) throws SignatureException {
+        Map<String, String> prepareParam = getBaseAuthParam(null);
+        prepareParam.put("file_len", Long.toString(fileLength));
+        prepareParam.put("file_name", fileName);
+        prepareParam.put("slice_num", (fileLength / SLICE_SIZE) + (fileLength % SLICE_SIZE == 0 ? 0 : 1) + "");
+
+
+        String response = com.translation.util.xunfei.HttpUtil.post(TRANSLATION_URL + PREPARE, prepareParam);
+        Optional.ofNullable(response).orElseThrow(() -> new RuntimeException("预处理接口请求失败！"));
+        ApiResultDto resultDto = JSON.parseObject(response, ApiResultDto.class);
+        String taskId = resultDto.getData();
+        Validator.validateTrue(resultDto.getOk() == 0, "预处理失败" + resultDto.toString());
+        log.info("预处理成功, taskId：" + taskId);
+        return taskId;
+    }
+
 
     /**
      * 获取每个接口都必须的鉴权参数
      *
-     * @return
-     * @throws SignatureException
+     * @return 请求接口基础参数
      */
     private static Map<String, String> getBaseAuthParam(String taskId) throws SignatureException {
         Map<String, String> baseParam = new HashMap<>();
@@ -152,73 +149,23 @@ public class TranslationUtil {
         baseParam.put("app_id", APP_ID);
         baseParam.put("ts", ts);
         baseParam.put("signa", EncryptUtil.HmacSHA1Encrypt(Objects.requireNonNull(EncryptUtil.MD5(APP_ID + ts)), SECRET_KEY));
-        if (taskId != null) {
-            baseParam.put("task_id", taskId);
-        }
-
+        Optional.ofNullable(taskId).ifPresent(v -> baseParam.put("task_id", v));
         return baseParam;
     }
 
-    /**
-     * 预处理
-     *
-     * @param audio     需要转写的音频
-     * @return
-     * @throws SignatureException
-     */
-    private static String prepare(MultipartFile audio) throws SignatureException {
-        Map<String, String> prepareParam = getBaseAuthParam(null);
-        long fileLenth = audio.getSize();
-
-        prepareParam.put("speaker_number", "1");
-        prepareParam.put("file_len", fileLenth + "");
-        prepareParam.put("file_name", audio.getOriginalFilename());
-        prepareParam.put("slice_num", (fileLenth/SLICE_SICE) + (fileLenth % SLICE_SICE == 0 ? 0 : 1) + "");
-
-        // 转写类型
-//        prepareParam.put("lfasr_type", "0");
-        // 开启分词
-//        prepareParam.put("has_participle", "true");
-        // 说话人分离
-//        prepareParam.put("has_seperate", "true");
-        // 设置多候选词个数
-//        prepareParam.put("max_alternatives", "2");
-        // 是否进行敏感词检出
-//        prepareParam.put("has_sensitive", "true");
-        // 敏感词类型
-//        prepareParam.put("sensitive_type", "1");
-        // 关键词
-//        prepareParam.put("keywords", "科大讯飞,中国");
-
-        String response = com.translation.util.xunfei.HttpUtil.post(TRANSLATION_URL + PREPARE, prepareParam);
-        if (response == null) {
-            throw new RuntimeException("预处理接口请求失败！");
-        }
-        ApiResultDto resultDto = JSON.parseObject(response, ApiResultDto.class);
-        String taskId = resultDto.getData();
-        if (resultDto.getOk() != 0 || taskId == null) {
-            throw new RuntimeException("预处理失败！" + response);
-        }
-
-        log.info("预处理成功, taskId：" + taskId);
-        return taskId;
-    }
 
     /**
      * 分片上传
      *
-     * @param taskId        任务id
-     * @param slice         分片的byte数组
-     * @throws SignatureException
+     * @param taskId 任务id
+     * @param slice  分片的byte数组
      */
     private static void uploadSlice(String taskId, String sliceId, byte[] slice) throws SignatureException {
         Map<String, String> uploadParam = getBaseAuthParam(taskId);
         uploadParam.put("slice_id", sliceId);
 
         String response = com.translation.util.xunfei.HttpUtil.postMulti(TRANSLATION_URL + UPLOAD, uploadParam, slice);
-        if (response == null) {
-            throw new RuntimeException("分片上传接口请求失败！");
-        }
+        Optional.ofNullable(response).orElseThrow(() -> new RuntimeException("分片上传接口请求失败"));
         if (JSON.parseObject(response).getInteger("ok") == 0) {
             log.info("分片上传成功, sliceId: " + sliceId + ", sliceLen: " + slice.length);
             return;
@@ -231,70 +178,86 @@ public class TranslationUtil {
     /**
      * 文件合并
      *
-     * @param taskId        任务id
-     * @throws SignatureException
+     * @param taskId 任务id
      */
     private static void merge(String taskId) throws SignatureException {
         String response = com.translation.util.xunfei.HttpUtil.post(TRANSLATION_URL + MERGE, getBaseAuthParam(taskId));
-        if (response == null) {
-            throw new RuntimeException("文件合并接口请求失败！");
-        }
+        Optional.ofNullable(response).orElseThrow(() -> new RuntimeException("文件合并接口请求失败!"));
         if (JSON.parseObject(response).getInteger("ok") == 0) {
             log.info("文件合并成功, taskId: " + taskId);
             return;
         }
-
         throw new RuntimeException("文件合并失败！" + response);
     }
 
     /**
      * 获取任务进度
      *
-     * @param taskId        任务id
-     * @throws SignatureException
+     * @param taskId 任务id
      */
-    private static ApiResultDto getProgress(String taskId) throws SignatureException {
+    public static ApiResultDto getProgress(String taskId) throws SignatureException {
         String response = com.translation.util.xunfei.HttpUtil.post(TRANSLATION_URL + GET_PROGRESS, getBaseAuthParam(taskId));
-        if (response == null) {
-            throw new RuntimeException("获取任务进度接口请求失败！");
-        }
-
+        Optional.ofNullable(response).orElseThrow(() -> new RuntimeException("获取任务进度接口请求失败！"));
         return JSON.parseObject(response, ApiResultDto.class);
     }
 
     /**
      * 获取转写结果
      *
-     * @param taskId
-     * @return
-     * @throws SignatureException
+     * @param taskId taskId
+     * @return json文档
      */
-    private static String getResult(String taskId) throws SignatureException {
+    public static String getResult(String taskId) throws SignatureException {
         String responseStr = HttpUtil.post(TRANSLATION_URL + GET_RESULT, getBaseAuthParam(taskId));
-        if (responseStr == null) {
-            throw new RuntimeException("获取结果接口请求失败！");
-        }
+        Optional.ofNullable(responseStr).orElseThrow(() -> new RuntimeException("获取结果接口请求失败！"));
         ApiResultDto response = JSON.parseObject(responseStr, ApiResultDto.class);
-        if (response.getOk() != 0) {
-            throw new RuntimeException("获取结果失败！" + responseStr);
-        }
-
+        Validator.validateTrue(response.getOk() == 0, "获取结果失败" + response);
         return response.getData();
     }
 
-    // 获取讯飞result中的转译内容
-    private static String getContentFromJSON(String json){
+    /**
+     * 将转写结果更新数据库
+     *
+     * @param jsonData 从讯飞拿的json文档
+     * @param taskId   根据taskId标识数据库那些数据需要更新
+     */
+    public static void updateContent(String jsonData, String taskId) {
+        JSONArray jsonArray = JSONArray.parseArray(jsonData);
+        JSONObject jsonObject = (JSONObject) jsonArray.remove(0);
+        System.out.println(jsonObject);
+        System.out.println(jsonObject.getString("bg"));
+        ProgramMapper programMapper = ApplicationContextProvider.getBean(ProgramMapper.class);
+        Program program = programMapper.selectByTaskId(taskId);
+        program.setBg(Integer.parseInt(jsonObject.getString("bg")));
+        program.setEd(Integer.parseInt(jsonObject.getString("ed")));
+        program.setContent(jsonObject.getString("onebest"));
+        program.setStatus(ProgramStatus.TRANSLATION_SUCCESS.getCode());
+        programMapper.updateByPrimaryKey(program);
+        if (jsonArray.size() > 0) {
+            List<Program> programList = new ArrayList<>(jsonArray.size());
+            for (Object o : jsonArray) {
+                jsonObject = (JSONObject) o;
+                Program newProgram = new Program();
+                BeanUtil.copyProperties(program, newProgram);
+                newProgram.setBg(Integer.parseInt(jsonObject.getString("bg")));
+                newProgram.setEd(Integer.parseInt(jsonObject.getString("ed")));
+                newProgram.setContent(jsonObject.getString("onebest"));
+                newProgram.setStatus(ProgramStatus.TRANSLATION_SUCCESS.getCode());
+                programList.add(newProgram);
+            }
+            programMapper.insertList(programList);
+        }
+    }
 
+    // 获取讯飞result中的转译内容
+    private static String getContentFromJSON(String json) {
         JSONArray jsonArray = JSONArray.parseArray(json);
         StringBuilder result = new StringBuilder();
 
-        for(int i = 0; i < jsonArray.size(); i++){
+        for (int i = 0; i < jsonArray.size(); i++) {
             JSONObject jsonObject = jsonArray.getJSONObject(i);
             result.append(jsonObject.getString("onebest"));
         }
-
         return result.toString();
     }
-
-
 }

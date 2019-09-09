@@ -1,4 +1,4 @@
-package com.translation.util;
+package com.translation.util.beanFactory;
 
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.annotation.Autowired;

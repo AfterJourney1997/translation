@@ -18,20 +18,7 @@
 
 <configuration>
 <property>
-                <name>fs.defaultFS</name>
-                <value>hdfs://192.168.201.131:9000</value>
-       </property>
-       <property>
-                <name>io.file.buffer.size</name>
-                <value>131072</value>
-        </property>
-       <property>
-               <name>hadoop.tmp.dir</name>
-               <value>file:/opt/hadoop/hadoop-2.8.5/tmp</value>
-       </property>
-       
-       <property>
-            <name>hadoop.security.authorization</name>
-            <value>false</value>
-        </property>
+        <name>fs.defaultFS</name>
+        <value>hdfs://10.32.6.221:9000</value>
+    </property>
 </configuration>

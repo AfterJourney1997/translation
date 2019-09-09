@@ -1,63 +1,59 @@
 package com.translation;
 
+import cn.hutool.core.io.IoUtil;
 import com.translation.dao.ProgramMapper;
-import com.translation.service.InfoService;
-import com.translation.util.xunfei.TranslationUtil;
-import org.apache.http.entity.ContentType;
+import com.translation.service.FileService;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IOUtils;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.junit4.SpringRunner;
-import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
-import java.io.FileInputStream;
+import java.io.*;
 
 @RunWith(SpringRunner.class)
 @SpringBootTest
 public class TranslationApplicationTests {
 
-    private static String TRANSLATION_URL;
-
-    @Value("${TRANSLATION_URL}")
-    private void setTranslationUrl(String TRANSLATION_URL){
-        TranslationApplicationTests.TRANSLATION_URL = TRANSLATION_URL;
-    }
 
     @Autowired
     private ProgramMapper programMapper;
     @Autowired
-    private InfoService infoService;
+    private FileService fileService;
+    @Autowired
+    private FileSystem fileSystem;
+
 
     @Test
     public void contextLoads() throws Exception {
-
-        /*String fileName = "nongcun_20180730_0000_0300.txt";
-
-        infoService.insertInfo(fileName);*/
-
-        System.out.println(TRANSLATION_URL);
-
-        String fileName = "temp.mav";
-
-        File file = new File("E:\\translation\\asfgdgsgljjlsdg.wav");
-        System.out.println(file.exists());
-        System.out.println(file.getPath());
-        FileInputStream fileInputStream = new FileInputStream(file);
-
-        MultipartFile multipartFile = new MockMultipartFile(fileName, file.getName(), ContentType.APPLICATION_OCTET_STREAM.toString(), fileInputStream);
-
-        System.out.println(multipartFile.getSize());
-        System.out.println(file.length());
-
-        //TranslationUtil.translation(multipartFile);
-
-/*        File file = new File("E:\\translation\\asfgdgsgljjlsdg.wav");
-        TestUtil.translation(file);*/
-
+        InputStream inputStream = new FileInputStream("E:\\广电\\源文件\\1061_20190129_0900_1100.mp3");
+        OutputStream outputStream = fileSystem.create(new Path("/program/1061_20190129_0900_1100_2.mp3"));
+        IoUtil.copy(inputStream, outputStream);
     }
 
+    public void upload() throws IOException {
+        File file = new File("E:\\广电\\源文件\\1061_20190129_1400_1700.mp3");
+        InputStream input = new FileInputStream(file);
+        byte[] byt = new byte[input.available()];
+        input.read(byt);
+        OutputStream outputStream = fileSystem.create(new Path("/program/" + file.getName()));
+        outputStream.write(byt);
+        outputStream.close();
+    }
+
+    public void listFile() {
+        try {
+            FileStatus[] fileStatuses = fileSystem.listStatus(new Path("/program"));
+            for (FileStatus fileStatus : fileStatuses) {
+                Path path = fileStatus.getPath();
+                System.out.println(path);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
 }

@@ -1,6 +1,5 @@
 package com.translation.util.xunfei;
 
-import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.MessageDigest;
@@ -23,7 +22,7 @@ public class EncryptUtil {
      * @throws SignatureException
      */
     public static String HmacSHA1Encrypt(String encryptText, String encryptKey) throws SignatureException {
-        byte[] rawHmac = null;
+        byte[] rawHmac;
         try {
             byte[] data = encryptKey.getBytes(StandardCharsets.UTF_8);
             SecretKeySpec secretKey = new SecretKeySpec(data, "HmacSHA1");
@@ -36,23 +35,22 @@ public class EncryptUtil {
         } catch (NoSuchAlgorithmException e) {
             throw new SignatureException("NoSuchAlgorithmException:" + e.getMessage());
         }
-        String oauth = new String(Base64.encodeBase64(rawHmac));
-        
-        return oauth;
+
+        return new String(Base64.encodeBase64(rawHmac));
     }
 
     public final static String MD5(String pstr) {
-        char md5String[] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
+        char[] md5String = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
         try {
             byte[] btInput = pstr.getBytes();
             MessageDigest mdInst = MessageDigest.getInstance("MD5");
             mdInst.update(btInput);
             byte[] md = mdInst.digest();
             int j = md.length;
-            char str[] = new char[j * 2];
+            char[] str = new char[j * 2];
             int k = 0;
-            for (int i = 0; i < j; i++) { // i = 0
-                byte byte0 = md[i]; // 95
+            // 95
+            for (byte byte0 : md) { // i = 0
                 str[k++] = md5String[byte0 >>> 4 & 0xf]; // 5
                 str[k++] = md5String[byte0 & 0xf]; // F
             }

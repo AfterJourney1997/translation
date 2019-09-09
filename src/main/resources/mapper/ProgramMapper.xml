@@ -2,27 +2,41 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.translation.dao.ProgramMapper">
   <resultMap id="BaseResultMap" type="com.translation.entity.Program">
-    <id column="id" jdbcType="INTEGER" property="id" />
-    <result column="father" jdbcType="INTEGER" property="father" />
-    <result column="frequency" jdbcType="VARCHAR" property="frequency" />
-    <result column="program" jdbcType="VARCHAR" property="program" />
-    <result column="airtime" jdbcType="DATE" property="airtime" />
-    <result column="content" jdbcType="LONGVARCHAR" property="content" />
-    <result column="status" jdbcType="INTEGER" property="status" />
+    <id column="id" jdbcType="INTEGER" property="id"/>
+    <result column="father" jdbcType="INTEGER" property="father"/>
+    <result column="frequency" jdbcType="VARCHAR" property="frequency"/>
+    <result column="program" jdbcType="VARCHAR" property="program"/>
+    <result column="airtime" jdbcType="DATE" property="airtime"/>
+    <result column="content" jdbcType="LONGVARCHAR" property="content"/>
+    <result column="status" jdbcType="INTEGER" property="status"/>
+    <result column="bg" jdbcType="INTEGER" property="bg"/>
+    <result column="ed" jdbcType="INTEGER" property="ed"/>
+    <result column="file_id" jdbcType="INTEGER" property="fileId"/>
   </resultMap>
   <delete id="deleteByPrimaryKey" parameterType="java.lang.Integer">
-    delete from translation.program
+    delete
+    from translation.program
     where id = #{id,jdbcType=INTEGER}
   </delete>
-  <insert id="insert" parameterType="com.translation.entity.Program">
-    insert into translation.program (id, father, frequency,
-      program, airtime, content, status
-      )
-    values (#{id,jdbcType=INTEGER}, #{father,jdbcType=INTEGER}, #{frequency,jdbcType=VARCHAR}, 
-      #{program,jdbcType=VARCHAR}, #{airtime,jdbcType=DATE}, #{content,jdbcType=LONGVARCHAR},
-      #{status,jdbcType=INTEGER}
-      )
+  <insert id="insert">
+    insert into translation.program (father, frequency, program, airtime, content, `status`, file_id)
+    values (#{father,jdbcType=INTEGER}, #{frequency,jdbcType=VARCHAR},
+            #{program,jdbcType=VARCHAR}, #{airtime,jdbcType=DATE}, #{content,jdbcType=LONGVARCHAR},
+            #{status,jdbcType=INTEGER}, #{fileId,jdbcType=INTEGER})
   </insert>
+
+  <insert id="insertList">
+    insert into translation.program
+    (father, frequency, program, airtime, content, `status`, bg, ed,file_id)
+    values
+    <foreach collection="list" item="item" separator=",">
+      (#{item.father,jdbcType=INTEGER}, #{item.frequency,jdbcType=VARCHAR},
+      #{item.program,jdbcType=VARCHAR}, #{item.airtime,jdbcType=DATE}, #{item.content,jdbcType=LONGVARCHAR},
+      #{item.status,jdbcType=INTEGER}, #{item.bg,jdbcType=INTEGER},
+      #{item.ed,jdbcType=INTEGER},#{item.fileId,jdbcType=INTEGER})
+    </foreach>
+  </insert>
+
   <update id="updateByPrimaryKey" parameterType="com.translation.entity.Program">
     update translation.program
     <set>
@@ -31,7 +45,9 @@
       <if test="program != null">program = #{program,jdbcType=VARCHAR},</if>
       <if test="airtime != null">airtime = #{airtime,jdbcType=DATE},</if>
       <if test="content != null">content = #{content,jdbcType=LONGVARCHAR},</if>
-      <if test="status != null">status = #{status,jdbcType=INTEGER}</if>
+      <if test="status != null">`status` = #{status,jdbcType=INTEGER},</if>
+      <if test="bg != null">`bg` = #{bg,jdbcType=INTEGER},</if>
+      <if test="ed != null">`ed` = #{ed,jdbcType=INTEGER},</if>
     </set>
     where id = #{id,jdbcType=INTEGER}
   </update>
@@ -43,32 +59,68 @@
       <if test="record.program != null">program = #{record.program,jdbcType=VARCHAR},</if>
       <if test="record.airtime != null">airtime = #{record.airtime,jdbcType=DATE},</if>
       <if test="record.content != null">content = #{record.content,jdbcType=LONGVARCHAR},</if>
-      <if test="record.status != null">status = #{record.status,jdbcType=INTEGER}</if>
+      <if test="record.status != null">`status` = #{record.status,jdbcType=INTEGER}</if>
     </set>
     where content = #{taskId,jdbcType=VARCHAR}
+  </update>
+
+  <update id="updateTaskId">
+    update program
+    set content=#{taskId}
+    where file_id = #{fileId}
+    limit 1
+  </update>
+  <update id="updateStatus">
+    update program
+    <if test="content!=null">
+      set content=#{content,jdbcType=CHAR}
+    </if>
+    set `status`=#{status,jdbcType=INTEGER}
+    where content=#{taskId,jdbcType=CHAR}
   </update>
   <select id="selectByPrimaryKey" parameterType="java.lang.Integer" resultMap="BaseResultMap">
     select program.id, father, frequency, program, airtime, content, status
     from translation.program
     where id = #{id,jdbcType=INTEGER}
   </select>
-  <select id="selectByContent" parameterType="java.lang.String" resultMap="BaseResultMap">
-    select id, father, frequency, program, airtime, content, status
+  <select id="selectByTaskId" parameterType="java.lang.String" resultMap="BaseResultMap">
+    select *
     from translation.program
     where content = #{content,jdbcType=LONGVARCHAR}
   </select>
   <select id="selectAll" resultMap="BaseResultMap">
-    select id, father, frequency, program, airtime, content, status
+    select id, father, frequency, program, airtime, content, `status`
     from translation.program
   </select>
   <select id="selectFather" resultMap="BaseResultMap">
-    select id, father, frequency, program, airtime, content, status
+    select id, father, frequency, program, airtime, content, `status`
     from translation.program
     where father = 0
   </select>
   <select id="selectAllProgram" resultMap="BaseResultMap">
-    select id, father, frequency, program, airtime, content, status
-    from translation.program
-    where father != 0
+    SELECT DISTINCT frequency,
+                    program,
+                    airtime,
+                    `status`,
+                    file_id
+    FROM translation.program
+    WHERE `status` > -1
+  </select>
+  <select id="selectAllTask" resultType="java.lang.String">
+    select content
+    from program
+    where `status` = 1
+  </select>
+
+  <select id="test" resultMap="BaseResultMap">
+    select *
+    from program
+    where id &gt; 2366
+      and id &lt; 2385
+  </select>
+
+  <select id="selectMaxFileId" resultType="java.lang.Integer">
+    select max(file_id)
+    from program
   </select>
 </mapper>

@@ -17,25 +17,12 @@
 <!-- Put site-specific property overrides in this file. -->
 
 <configuration>
-<property>
-             <name>dfs.namenode.name.dir</name>
-             <value>file:/opt/hadoop/hadoop-2.8.5/hdfs/name</value>
-        </property>
-        <property>
-             <name>dfs.datanode.data.dir</name>
-             <value>file:/opt/hadoop/hadoop-2.8.5/hdfs/data</value>
-        </property>
-	  <property>
-        <name>dfs.replication</name>
-        <value>2</value>
-    </property>
-    <property>
-        <name>dfs.webhdfs.enabled</name>
-        <value>true</value>
-    </property>
-    <property>
-        <name>dfs.permissions</name>
-        <value>false</value>
-    </property>
-        
+  <property>
+    <name>dfs.replication</name>
+    <value>1</value>
+  </property>
+  <property>
+    <name>dfs.namenode.http-address</name>
+    <value>10.32.6.221:50070</value>
+  </property>
 </configuration>

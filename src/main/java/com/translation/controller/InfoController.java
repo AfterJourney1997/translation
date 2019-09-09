@@ -1,6 +1,7 @@
 package com.translation.controller;
 
 import com.translation.aop.ResultBean;
+import com.translation.entity.NoProgram;
 import com.translation.entity.Program;
 import com.translation.service.InfoService;
 import io.swagger.annotations.Api;
@@ -26,20 +27,24 @@ public class InfoController {
 
     @RequestMapping(value = "/allProgram", method = RequestMethod.GET)
     @ApiOperation(value = "查询全部节目信息", notes = "参数包括：无")
-    public Object getAllProgram(){
-
+    public Object getAllProgram() {
         List<Program> allProgramList = infoService.getAllProgram();
-
         return new ResultBean<>(allProgramList);
     }
 
-    @RequestMapping(method = RequestMethod.PUT, produces = "application/json;charset=UTF-8")
-    @ApiOperation(value = "修改指定节目信息", notes = "参数包括：id、内容")
-    public Object updateProgram(@RequestBody @NonNull Program program){
+//    @RequestMapping(value = "/", method = RequestMethod.PUT)
+//    @ApiOperation(value = "修改指定节目信息", notes = "参数包括：id、内容")
+//    public Object updateProgram(@RequestBody @NonNull Program program) {
+//
+//        infoService.updateProgram(program);
+//
+//        return new ResultBean<>();
+//    }
 
-        infoService.updateProgram(program);
-
-        return new ResultBean<>();
+    @RequestMapping("/getNoProgram")
+    @ApiOperation(value = "获取不需要节目单的转写列表", notes = "无参数，前端做分页")
+    public Object getNoProgram() {
+        List<NoProgram> noProgramList = infoService.getNoProgram();
+        return new ResultBean<>(noProgramList);
     }
-
 }

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.translation.dao.NoProgramMapper">
+  <resultMap id="BaseResultMap" type="com.translation.entity.NoProgram">
+    <id column="id" jdbcType="INTEGER" property="id"/>
+    <result column="insert_time" jdbcType="TIMESTAMP" property="insertTime"/>
+    <result column="content" jdbcType="CHAR" property="content"/>
+    <result column="status" jdbcType="INTEGER" property="status"/>
+  </resultMap>
+  <insert id="insert">
+    insert no_program(content, `status`)
+    values (#{content}, #{status})
+  </insert>
+  <update id="updateStatus">
+    update program
+    <if test="content!=null">
+      set content=#{content,jdbcType=CHAR}
+    </if>
+    set status=#{status,jdbcType=INTEGER}
+    where content=#{taskId,jdbcType=CHAR}
+  </update>
+  <select id="selectAll" resultMap="BaseResultMap">
+    select *
+    from no_program
+    where `status` = 0;
+  </select>
+</mapper>

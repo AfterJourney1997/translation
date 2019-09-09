@@ -1,9 +1,13 @@
 package com.translation.util;
 
+import lombok.Setter;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 
 import java.net.URI;
 
@@ -13,30 +17,25 @@ import java.net.URI;
  **/
 
 @Component
+@ConfigurationProperties("hdfs")
 public class FileSystemUtil {
 
-    private static String path;
-    private static String userName;
+    @Setter
+    private String path;
+    @Setter
+    private String userName;
 
-    // 注入配置文件中的值
-    @Value("${hdfs.path}")
-    private void setPath(String path){
-        FileSystemUtil.path = path;
-    }
 
-    @Value("${hdfs.username}")
-    private void setUsername(String userName){
-        FileSystemUtil.userName = userName;
-    }
-
-    public static FileSystem getFileSystem() {
+    @Bean
+    public FileSystem getFileSystem() {
         Configuration configuration = new Configuration();
         configuration.set("fs.defaultFS", path);
+        FileSystem fileSystem = null;
         try {
-            return FileSystem.get(new URI(path), configuration, userName);
+            fileSystem = FileSystem.get(new URI(path), configuration, userName);
         } catch (Exception e) {
             e.printStackTrace();
         }
-        return null;
+        return fileSystem;
     }
 }
