@@ -11,6 +11,7 @@ import lombok.Setter;
 import org.apache.hadoop.fs.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -34,6 +35,7 @@ public class FileService {
      * @param inputStream inputStream
      * @param filePath    文件全路径
      */
+    @Transactional
     public void uploadFileProgram(InputStream inputStream, String filePath) {
         int field = programMapper.selectMaxFileId() + 1;
         String[] elems = filePath.split("\\.");

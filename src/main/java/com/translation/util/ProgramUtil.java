@@ -1,6 +1,8 @@
 package com.translation.util;
 
+import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.io.file.FileReader;
+import cn.hutool.json.JSONUtil;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.translation.dao.ProgramMapper;
@@ -11,6 +13,9 @@ import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.Charset;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -46,9 +51,15 @@ public class ProgramUtil {
 
         Program program = new Program();
         // 读取program.json文件到String
-        File file = new File(ProgramUtil.class.getResource("/programs.json").getPath());
-        FileReader fileReader = new FileReader(file);
-        String jsonString = fileReader.readString();
+        InputStream inputStream;
+        try {
+            inputStream = ProgramUtil.class.getResource("/programs.json").openStream();
+        } catch (IOException e) {
+            e.printStackTrace();
+            return null;
+        }
+
+        String jsonString = IoUtil.read(inputStream, Charset.defaultCharset());
 
         // 删去.txt文件后缀
         fileNames[3] = fileNames[3].substring(0, fileNames[3].length() - 4);
